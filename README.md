@@ -87,7 +87,7 @@ RL モデルの追加説明変数として使用されます．
 |----------|------|
 | `data/network/link.csv` | 道路リンク（リンクID・起終点ノード・歩行者可否・車線数・歩道幅員など） |
 | `data/network/node.csv` | 道路ノード（ノードID・経緯度） |
-| `data/dlink_features.parquet` | リンク属性（土地利用 10 カテゴリ・車線数・歩道幅・速度） |
+| `data/dlink_features.parquet` | リンク属性（土地利用 14 カテゴリ・車線数・歩道幅）※常にゼロの列は除外済み |
 | `data/routes.parquet` | マップマッチング済み歩行者経路（155 経路） |
 | `data/aerial_photo/` | 松山市 2010 年航空写真（zoom 18）と地理参照情報 |
 | `data/land_use/` | 国土数値情報 土地利用細分メッシュデータ（平成 20 年） |
