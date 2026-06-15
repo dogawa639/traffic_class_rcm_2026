@@ -10,10 +10,32 @@ model:
   max_iter: 500
   conv_eps: 1.0e-6
 
+# 使用する説明変数の設定
+# dlink_cols: null の場合は dlink_features.parquet の全列を使用
+# リストで列名を指定すると，その列のみを説明変数として使用します
+features:
+  dlink_cols:
+    # - landuse_1    # 田
+    # - landuse_2    # 畑
+    # - landuse_5    # 山林
+    # - landuse_6    # 水面
+    # - landuse_7    # その他の自然地
+    # - landuse_9    # 住宅用地
+    # - landuse_10   # 商業用地
+    # - landuse_11   # 工業用地
+    # - landuse_12   # 公共施設用地
+    # - landuse_13   # 公共施設用地（学校）
+    # - landuse_14   # 公共施設用地（神社・寺）
+    # - landuse_16   # 交通施設用地
+    # - landuse_17   # 公共空地
+    # - landuse_19   # その他の空地
+    - lanes        # 車線数
+    - ped_width    # 歩道幅員 (m)
+
 sam3:
   # ここにセグメンテーションしたいキーワードを追加してください
   # 例: ["road", "sidewalk", "tree", "building", "car"]
-  words: []
+  words: ["green"]
   cache_dir: cache/sam3
-  model: sam3_b.pt
+  model: data/sam3.pt
   buffer_px: 20   # リンクバッファ半径（ピクセル）

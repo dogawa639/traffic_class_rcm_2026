@@ -19,6 +19,7 @@ dependencies = [
     "Pillow>=10.0",
     "numpy>=1.26",
     "shapely>=2.0",
+    "matplotlib-fontja",
 ]
 
 [project.optional-dependencies]

@@ -30,3 +30,7 @@ env/
 # モデル保存先
 outputs/
 mlruns/
+runs/
+
+.serena/
+.claude/
