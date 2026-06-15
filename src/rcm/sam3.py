@@ -115,7 +115,7 @@ def _run_sam3(
     Combines masks from all detected instances via logical OR.
     """
     try:
-        from ultralytics import SAM  # type: ignore[import]
+        from ultralytics.models.sam import SAM3SemanticPredictor  # type: ignore[import]
     except ImportError as exc:
         raise ImportError(
             "ultralytics is required for SAM3 features. "
@@ -123,8 +123,11 @@ def _run_sam3(
         ) from exc
 
     log.info("Running SAM3 (%s) for word=%r …", model_name, word)
-    sam = SAM(model_name)
-    results = sam(str(aerial_photo_path), texts=[word])
+
+    overrides = dict(conf=0.25, task="segment", mode="predict", model=model_name, half=False)
+    predictor = SAM3SemanticPredictor(overrides=overrides)
+    predictor.set_image(str(aerial_photo_path))
+    results = predictor(text=[word])
 
     combined = np.zeros((img_h, img_w), dtype=bool)
     for result in results:
@@ -133,7 +136,7 @@ def _run_sam3(
         # masks.data: torch.Tensor (N, H, W)
         masks_np = result.masks.data.cpu().numpy().astype(bool)
         for m in masks_np:
-            # Resize to full image if necessary (SAM may return downscaled masks)
+            # Resize to full image if necessary
             if m.shape != (img_h, img_w):
                 from PIL import Image as _Image
                 m_img = _Image.fromarray(m.astype(np.uint8) * 255).resize(
@@ -164,7 +167,7 @@ def get_sam3_features(
     node_lookup: dict[int, Node],
     cache_dir: str | Path,
     *,
-    model_name: str = "sam3_b.pt",
+    model_name: str = "sam3.pt",
     buffer_px: int = 20,
 ) -> pd.DataFrame:
     """Compute per-link segmentation coverage ratios for each text prompt.
@@ -188,7 +191,7 @@ def get_sam3_features(
     cache_dir:
         Directory for caching segmentation masks and area ratios.
     model_name:
-        SAM3 model checkpoint name (downloaded automatically by ultralytics).
+        SAM3 model checkpoint name (requires manual download from HuggingFace).
     buffer_px:
         Buffer radius in pixels around each link segment.
 
