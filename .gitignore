@@ -1,0 +1,32 @@
+# データ（別途配布）
+data/
+
+# SAM3 キャッシュ
+cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# 仮想環境
+.venv/
+venv/
+env/
+
+# Jupyter チェックポイント
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# エディタ
+.vscode/
+.idea/
+
+# モデル保存先
+outputs/
+mlruns/

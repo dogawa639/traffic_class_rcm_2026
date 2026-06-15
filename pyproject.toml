@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rcm-exercise"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "geopandas>=1.0",
+    "pydantic>=2.0",
+    "scipy>=1.13",
+    "pandas>=2.2",
+    "pyarrow>=16",
+    "folium>=0.17",
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+    "pyyaml>=6.0",
+    "Pillow>=10.0",
+    "numpy>=1.26",
+    "shapely>=2.0",
+]
+
+[project.optional-dependencies]
+sam3 = ["ultralytics>=8.3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rcm"]

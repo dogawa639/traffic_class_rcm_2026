@@ -1,0 +1,19 @@
+data:
+  network_link: data/network/link.csv
+  network_node: data/network/node.csv
+  routes: data/routes.parquet
+  dlink_features: data/dlink_features.parquet
+  aerial_photo: data/aerial_photo/matsuyama_2010_z18.png
+  aerial_photo_geo: data/aerial_photo/matsuyama_2010_z18_geo.json
+
+model:
+  max_iter: 500
+  conv_eps: 1.0e-6
+
+sam3:
+  # ここにセグメンテーションしたいキーワードを追加してください
+  # 例: ["road", "sidewalk", "tree", "building", "car"]
+  words: []
+  cache_dir: cache/sam3
+  model: sam3_b.pt
+  buffer_px: 20   # リンクバッファ半径（ピクセル）
