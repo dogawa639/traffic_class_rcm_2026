@@ -20,6 +20,8 @@ dependencies = [
     "numpy>=1.26",
     "shapely>=2.0",
     "matplotlib-fontja",
+    "notebook>=7.0",
+    "ipykernel>=6.0",
 ]
 
 [project.optional-dependencies]

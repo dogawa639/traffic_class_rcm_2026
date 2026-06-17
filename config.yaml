@@ -2,6 +2,7 @@ data:
   network_link: data/network/link.csv
   network_node: data/network/node.csv
   routes: data/routes.parquet
+  min_confidence: 0.5
   dlink_features: data/dlink_features.parquet
   aerial_photo: data/aerial_photo/matsuyama_2010_z18.png
   aerial_photo_geo: data/aerial_photo/matsuyama_2010_z18_geo.json
@@ -9,6 +10,13 @@ data:
 model:
   max_iter: 500
   conv_eps: 1.0e-6
+  # 同時推定が不安定な場合に備えて，既定では beta と gamma を交互に最適化します
+  # "joint" にすると従来の同時最適化に戻せます
+  optimization: alternating
+  outer_iter: 20
+  outer_tol: 1.0e-5
+  gamma_min: 0.1
+  gamma_max: 0.999
 
 # 使用する説明変数の設定
 # dlink_cols: null の場合は dlink_features.parquet の全列を使用

@@ -3,6 +3,11 @@
 松山市の歩行者 GPS トラッキングデータ（マップマッチング済み）を使い，
 **Recursive Logit (RL) モデル**（Fosgerau et al., 2013）を推定する演習リポジトリです．
 
+> **注**: ローカルでPython環境を構築する場合：
+> `uv` のインストール方法は公式ページ
+> [Installing uv](https://docs.astral.sh/uv/getting-started/installation/)
+> を参照してください．
+
 ## 演習の概要
 
 | パート | 内容 |
@@ -61,6 +66,11 @@ uv pip install -e .
 model:
   max_iter: 500      # L-BFGS-B 最大反復数
   conv_eps: 1.0e-6   # 収束判定閾値
+  optimization: alternating  # alternating または joint
+  outer_iter: 20     # 交互最適化の外側反復数
+  outer_tol: 1.0e-5  # 交互最適化の停止判定
+  gamma_min: 1.0e-4  # gamma の下限
+  gamma_max: 0.999   # gamma の上限
 
 sam3:
   words: []          # ← ここにキーワードを追加（Part 4）
@@ -105,6 +115,8 @@ $$V(a) = \log \sum_{j \in \mathcal{A}(a)} \exp\!\bigl(\beta^\top x_j + \gamma \,
 - $V(a)$: リンク $a$ を出発したときの期待最大効用
 
 パラメータは条件付き対数尤度を L-BFGS-B で最大化することで推定します．
+既定では推定の安定化のため，$\beta$ と $\gamma$ を交互に更新します
+（`optimization: joint` にすると従来の同時最適化）．
 
 ## 参考文献
 
