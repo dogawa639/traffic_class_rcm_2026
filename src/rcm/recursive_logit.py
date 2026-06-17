@@ -6,7 +6,7 @@ import json
 import logging
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import scipy.optimize
@@ -61,6 +61,13 @@ def _build_log_transition_matrix(
         local_offsets = np.arange(total_edges) - np.repeat(cum_counts[:-1], counts)
         cols_ll = argsort_from[starts + local_offsets]
         data_ll = utils[cols_ll]
+
+        # Prohibit U-turns: exclude transitions to the reverse link
+        # (i.e. next link's to_node == current link's from_node)
+        no_uturn = to_nodes[cols_ll] != from_nodes[rows_ll]
+        rows_ll = rows_ll[no_uturn]
+        cols_ll = cols_ll[no_uturn]
+        data_ll = data_ll[no_uturn]
     else:
         rows_ll = np.empty(0, dtype=np.intp)
         cols_ll = np.empty(0, dtype=np.intp)
@@ -197,9 +204,26 @@ class RecursiveLogit:
         self,
         max_iter: int = 500,
         conv_eps: float = 1e-6,
+        optimization: Literal["alternating", "joint"] = "alternating",
+        outer_iter: int = 20,
+        outer_tol: float = 1e-5,
+        gamma_min: float = 1e-4,
+        gamma_max: float = 0.999,
     ) -> None:
+        if optimization not in {"alternating", "joint"}:
+            raise ValueError("optimization must be either 'alternating' or 'joint'")
+        if outer_iter < 1:
+            raise ValueError("outer_iter must be >= 1")
+        if not (0.0 < gamma_min < gamma_max < 1.0):
+            raise ValueError("Require 0 < gamma_min < gamma_max < 1")
+
         self.max_iter = max_iter
         self.conv_eps = conv_eps
+        self.optimization = optimization
+        self.outer_iter = outer_iter
+        self.outer_tol = outer_tol
+        self.gamma_min = gamma_min
+        self.gamma_max = gamma_max
         self._beta: np.ndarray | None = None
         self._beta_se: np.ndarray | None = None
         self._train_ll: float | None = None
@@ -212,6 +236,7 @@ class RecursiveLogit:
         self._result: scipy.optimize.OptimizeResult | None = None
         self._extra_features_raw: np.ndarray | None = None
         self._feature_names: list[str] | None = None
+        self._optimization_history: list[float] = []
 
     def fit(
         self,
@@ -222,6 +247,11 @@ class RecursiveLogit:
         feature_names: list[str] | None = None,
     ) -> None:
         """Fit RL model by maximising conditional log-likelihood (L-BFGS-B).
+
+        By default, parameters are estimated with alternating updates: beta is
+        optimized with gamma fixed, then gamma is optimized with beta fixed.
+        Set ``optimization="joint"`` in the constructor to use the previous
+        single-vector optimization.
 
         Parameters
         ----------
@@ -282,13 +312,78 @@ class RecursiveLogit:
                 return 1e10
 
         x0 = np.zeros(n_feat + 1, dtype=float)
-        x0[-1] = 2.0  # gamma_raw initial: sigmoid(2.0) ≈ 0.88
-        result = scipy.optimize.minimize(
-            neg_ll,
-            x0,
-            method="L-BFGS-B",
-            options={"maxiter": self.max_iter, "ftol": 1e-12, "gtol": self.conv_eps},
+        gamma_bounds = (
+            float(scipy.special.logit(self.gamma_min)),
+            float(scipy.special.logit(self.gamma_max)),
         )
+        x0[-1] = float(np.clip(2.0, *gamma_bounds))  # sigmoid(2.0) ≈ 0.88
+
+        optim_options = {"maxiter": self.max_iter, "ftol": 1e-12, "gtol": self.conv_eps}
+        if self.optimization == "joint":
+            bounds = [(None, None)] * n_feat + [gamma_bounds]
+            result = scipy.optimize.minimize(
+                neg_ll,
+                x0,
+                method="L-BFGS-B",
+                bounds=bounds,
+                options=optim_options,
+            )
+            self._optimization_history = [float(result.fun)]
+        else:
+            beta = x0[:-1].copy()
+            gamma_raw = float(x0[-1])
+            prev_fun = float("inf")
+            success = True
+            messages: list[str] = []
+            nit = 0
+            self._optimization_history = []
+
+            for outer in range(self.outer_iter):
+                beta_result = scipy.optimize.minimize(
+                    lambda b: neg_ll(np.r_[b, gamma_raw]),
+                    beta,
+                    method="L-BFGS-B",
+                    options=optim_options,
+                )
+                beta = beta_result.x.copy()
+                success = success and bool(beta_result.success)
+                if not beta_result.success:
+                    messages.append(f"beta step {outer + 1}: {beta_result.message}")
+
+                gamma_result = scipy.optimize.minimize(
+                    lambda g: neg_ll(np.r_[beta, float(g[0])]),
+                    np.array([gamma_raw], dtype=float),
+                    method="L-BFGS-B",
+                    bounds=[gamma_bounds],
+                    options=optim_options,
+                )
+                gamma_raw = float(gamma_result.x[0])
+                success = success and bool(gamma_result.success)
+                if not gamma_result.success:
+                    messages.append(f"gamma step {outer + 1}: {gamma_result.message}")
+
+                fun = neg_ll(np.r_[beta, gamma_raw])
+                self._optimization_history.append(float(fun))
+                nit = outer + 1
+                if np.isfinite(prev_fun) and (
+                    abs(prev_fun - fun) <= self.outer_tol * max(1.0, abs(prev_fun))
+                ):
+                    break
+                prev_fun = fun
+
+            params = np.r_[beta, gamma_raw]
+            message = (
+                f"Alternating optimization stopped after {nit} outer iterations"
+                if not messages
+                else "; ".join(messages)
+            )
+            result = scipy.optimize.OptimizeResult(
+                x=params,
+                fun=float(self._optimization_history[-1]),
+                success=success,
+                message=message,
+                nit=nit,
+            )
         self._result = result
         self._beta = result.x.copy()
 
@@ -359,6 +454,7 @@ class RecursiveLogit:
         route_links: list[int] = []
         current_node = origin
         visited_nodes: set[int] = {current_node}
+        prev_from_node: int | None = None  # from_node of the last traversed link
 
         for _ in range(len(network.links) + 1):
             if current_node == destination:
@@ -366,10 +462,15 @@ class RecursiveLogit:
             outgoing = from_node_to_links.get(current_node)
             if not outgoing:
                 break
+            # Exclude U-turn: reverse of the link just traversed (to_node == prev from_node)
+            candidates = [lk for lk in outgoing if lk.to_node != prev_from_node]
+            if not candidates:
+                candidates = outgoing
             best_link = max(
-                outgoing,
-                key=lambda lk: utils[link_by_id[lk.link_id]] + V[link_by_id[lk.link_id]],
+                candidates,
+                key=lambda lk: utils[link_by_id[lk.link_id]] + gamma * V[link_by_id[lk.link_id]],
             )
+            prev_from_node = best_link.from_node
             route_links.append(best_link.link_id)
             current_node = best_link.to_node
             if current_node in visited_nodes:
@@ -458,6 +559,9 @@ class RecursiveLogit:
         print(f"  LL(*)  [final log-likelihood]:     {ll_final:>12.4f}")
         print(f"  Rho-squared        (McFadden R²):  {rho_sq:>12.4f}")
         print(f"  Adj. rho-squared:                  {rho_sq_adj:>12.4f}")
+        print(f"  Optimization method:               {self.optimization:>12}")
+        if self.optimization == "alternating":
+            print(f"  Outer iterations:                  {len(self._optimization_history):>12}")
         print("-" * w)
         header = f"  {'Parameter':<20}  {'Estimate':>10}  {'Std. Err.':>10}"
         header += f"  {'t-value':>9}  {'p-value':>9}  {'':3}"
@@ -491,6 +595,8 @@ class RecursiveLogit:
             "ll_final": ll_final,
             "rho_squared": rho_sq,
             "adj_rho_squared": rho_sq_adj,
+            "optimization": self.optimization,
+            "outer_iterations": len(self._optimization_history),
         }
 
     @property
@@ -521,6 +627,9 @@ class RecursiveLogit:
             save_dict["extra_features_raw"] = self._extra_features_raw
         np.savez(dest / "weights.npz", **save_dict)
         meta = {"feature_names": self._feature_names}
+        meta["optimization"] = self.optimization
+        meta["gamma_min"] = self.gamma_min
+        meta["gamma_max"] = self.gamma_max
         (dest / "meta.json").write_text(json.dumps(meta, indent=2))
 
     @classmethod
@@ -542,4 +651,7 @@ class RecursiveLogit:
         if meta_path.exists():
             meta = json.loads(meta_path.read_text())
             model._feature_names = meta.get("feature_names")
+            model.optimization = meta.get("optimization", model.optimization)
+            model.gamma_min = meta.get("gamma_min", model.gamma_min)
+            model.gamma_max = meta.get("gamma_max", model.gamma_max)
         return model

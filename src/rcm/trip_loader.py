@@ -29,7 +29,7 @@ def load_trips(
         Path to ``routes.parquet``.  Expected columns:
         ``trip_id, link_ids (list[int]), confidence, is_valid, origin, destination``.
     min_confidence:
-        Trips with confidence below this threshold are filtered out (default 0.6).
+        Trips with confidence below this threshold are filtered out (default 0.5).
     mode:
         Travel mode label attached to each ObservedTrip (default ``"ped"``).
 
